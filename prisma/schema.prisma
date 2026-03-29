@@ -1,0 +1,51 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String   // Hashed password
+  type      String   @default("Local") // "Local" or "Private"
+  createdAt DateTime @default(now())
+
+  // Relationships
+  sentRequests     ChatRequest[] @relation("Sender")
+  receivedRequests ChatRequest[] @relation("Receiver")
+  sentMessages     Message[]     @relation("Sender")
+  receivedMessages Message[]     @relation("Receiver")
+}
+
+model ChatRequest {
+  id         String   @id @default(uuid())
+  senderId   String
+  receiverId String
+  status     String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
+  createdAt  DateTime @default(now())
+
+  sender   User @relation("Sender", fields: [senderId], references: [id])
+  receiver User @relation("Receiver", fields: [receiverId], references: [id])
+
+  @@unique([senderId, receiverId])
+}
+
+model Message {
+  id          String   @id @default(uuid())
+  senderId    String
+  receiverId  String
+  content     String
+  isAnonymous Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  sender   User @relation("Sender", fields: [senderId], references: [id])
+  receiver User @relation("Receiver", fields: [receiverId], references: [id])
+}
