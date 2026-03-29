@@ -47,7 +47,7 @@ export default function Register() {
   return (
     <div className="bg-dots" style={{minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
       <div className="card shadow-hard-lg" style={{maxWidth: '500px', width: '90%'}}>
-        <h2 style={{fontSize: '3rem', marginBottom: '1rem'}}>Join HushLink</h2>
+        <h2 style={{fontSize: 'clamp(2rem, 8vw, 3rem)', marginBottom: '1rem'}}>Join HushLink</h2>
         {error && <div style={{color: 'red', marginBottom: '1rem'}}><b>{error}</b></div>}
         <form onSubmit={handleRegister} style={{display: 'flex', flexDirection: 'column', gap: '1.5rem'}}>
           <div>

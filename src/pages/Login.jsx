@@ -36,7 +36,7 @@ export default function Login() {
   return (
     <div className="bg-dots" style={{minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
       <div className="card shadow-hard-lg" style={{maxWidth: '400px', width: '90%'}}>
-        <h2 style={{fontSize: '3rem', marginBottom: '1rem'}}>Welcome Back</h2>
+        <h2 style={{fontSize: 'clamp(2rem, 8vw, 3rem)', marginBottom: '1rem'}}>Welcome Back</h2>
         {error && <div style={{color: 'red', marginBottom: '1rem'}}><b>{error}</b></div>}
         <form onSubmit={handleLogin} style={{display: 'flex', flexDirection: 'column', gap: '1.5rem'}}>
           <div>

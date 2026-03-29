@@ -99,7 +99,7 @@ const ProblemSolution = () => (
 const Features = () => (
   <section id="features" className="bg-primary border-y border-standard">
     <div className="container">
-      <h2 style={{textAlign: 'center', marginBottom:'3rem', fontSize:'3rem'}}>Everything You Need</h2>
+      <h2 style={{textAlign: 'center', marginBottom:'3rem', fontSize:'clamp(2rem, 6vw, 3rem)'}}>Everything You Need</h2>
       <div className="grid-3">
         {['Local Chats', 'Private Requests', 'Anonymous Mode'].map((feat, i) => (
           <div className="feature-card overflow-hidden" key={feat}>
@@ -116,7 +116,7 @@ const Features = () => (
 const HowItWorks = () => (
   <section id="how-it-works" className="bg-base text-white border-b-2">
     <div className="container">
-      <h2 style={{textAlign: 'center', marginBottom:'4rem', fontSize:'3.5rem', color:'var(--color-white)'}}>How It Works</h2>
+      <h2 style={{textAlign: 'center', marginBottom:'4rem', fontSize:'clamp(2rem, 7vw, 3.5rem)', color:'var(--color-white)'}}>How It Works</h2>
       <div className="timeline">
         <div className="line"></div>
         <div className="step-wrapper">
@@ -175,8 +175,8 @@ const Testimonials = () => (
 const CTA = () => (
   <section className="bg-primary border-b border-standard">
     <div className="container text-center">
-      <h2 style={{fontSize: '4rem', marginBottom:'2rem'}}>Ready to take control?</h2>
-      <Link to="/register" className="btn btn-primary" style={{fontSize: '1.25rem', padding: '1.5rem 3rem'}}>Create Your Account</Link>
+      <h2 style={{fontSize: 'clamp(2.5rem, 8vw, 4rem)', marginBottom:'2rem'}}>Ready to take control?</h2>
+      <Link to="/register" className="btn btn-primary" style={{fontSize: 'clamp(1rem, 4vw, 1.25rem)', padding: '1rem 2rem'}}>Create Your Account</Link>
     </div>
   </section>
 );
@@ -238,7 +238,7 @@ export default function Home() {
           }
         }
       `}</style>
-      <header className="logo-wrapper" style={{ padding: '2rem 5%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.75rem', fontWeight: 900, fontSize: '3.5rem' }}>
+      <header className="logo-wrapper" style={{ padding: '2rem 5%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.75rem', fontWeight: 900, fontSize: 'clamp(2rem, 6vw, 3.5rem)' }}>
         <div className="logo-icon" style={{ background: 'var(--color-black)', color: 'var(--color-primary)', padding: '0.2rem 0.6rem', border: '3px solid black', borderRadius: '4px', boxShadow: '4px 4px 0 0 black' }}>⚡</div>
         <span className="logo-text" style={{ letterSpacing: '-1px' }}>HushLink</span>
       </header>

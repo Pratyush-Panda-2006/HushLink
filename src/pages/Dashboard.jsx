@@ -13,6 +13,7 @@ export default function Dashboard() {
   const [messages, setMessages] = useState([]);
   const [messageInput, setMessageInput] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(false);
+  const [mobileView, setMobileView] = useState('sidebar'); // 'sidebar' or 'chat'
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -97,6 +98,7 @@ export default function Dashboard() {
   const loadChat = async (friend) => {
     setActiveChat(friend);
     setTab('chat');
+    setMobileView('chat');
     
     // Fetch historical messages
     const { data } = await supabase
@@ -146,9 +148,9 @@ export default function Dashboard() {
   if (!currentUser) return <div>Loading...</div>;
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: 'var(--color-light-gray)' }}>
+    <div className="dashboard-container">
       {/* Sidebar */}
-      <div style={{ width: '300px', background: 'var(--color-base)', color: 'var(--color-white)', display: 'flex', flexDirection: 'column', borderRight: 'var(--border-thick)' }}>
+      <div className={`dash-sidebar-col ${mobileView === 'sidebar' ? 'mobile-active' : 'mobile-hidden'}`}>
         <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--color-dark-gray)' }}>
           <h2 style={{margin: 0, fontFamily: 'var(--font-heading)'}}>HushLink</h2>
           <p style={{margin: 0, opacity: 0.7}}>Welcome, {currentUser.username} ({currentUser.type})</p>
@@ -216,10 +218,13 @@ export default function Dashboard() {
       </div>
 
       {/* Main Chat Area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--color-bg-light)' }}>
+      <div className={`dash-chat-col ${mobileView === 'chat' ? 'mobile-active' : 'mobile-hidden'}`}>
         {tab === 'chat' && activeChat ? (
           <>
-            <div style={{ padding: '1.5rem', background: 'var(--color-white)', borderBottom: 'var(--border-thick)', display: 'flex', alignItems: 'center' }}>
+            <div style={{ padding: '1.5rem', background: 'var(--color-white)', borderBottom: 'var(--border-thick)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <button className="mobile-only-btn btn btn-secondary" style={{padding: '0.4rem 0.8rem', borderRadius: '4px'}} onClick={() => { setMobileView('sidebar'); }}>
+                &larr; Back
+              </button>
               <h2 style={{ margin: 0 }}>Chat with {activeChat.username}</h2>
             </div>
             
@@ -273,6 +278,49 @@ export default function Dashboard() {
       </div>
 
       <style>{`
+        .dashboard-container {
+          display: flex;
+          height: 100vh;
+          background: var(--color-light-gray);
+        }
+        .dash-sidebar-col {
+          width: 300px;
+          background: var(--color-base);
+          color: var(--color-white);
+          display: flex;
+          flex-direction: column;
+          border-right: var(--border-thick);
+        }
+        .dash-chat-col {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          background: #fffdf9; /* light warm background */
+        }
+        .mobile-only-btn {
+          display: none;
+        }
+
+        @media (max-width: 768px) {
+          .dash-sidebar-col {
+            width: 100%;
+            border-right: none;
+            display: none;
+          }
+          .dash-chat-col {
+            display: none;
+          }
+          .dash-sidebar-col.mobile-active {
+            display: flex;
+          }
+          .dash-chat-col.mobile-active {
+            display: flex;
+          }
+          .mobile-only-btn {
+            display: inline-flex;
+          }
+        }
+
         .tab-btn {
           flex: 1;
           padding: 1rem;
