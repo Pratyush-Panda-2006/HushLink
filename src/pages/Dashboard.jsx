@@ -342,7 +342,7 @@ export default function Dashboard() {
                      </h3>
                     <span className="pill" style={{color: 'black', background: u.type === 'Local' ? 'var(--color-primary)' : 'var(--color-accent)'}}>{u.type}</span>
                   </div>
-                  {u.type === 'Local' ? (
+                  {u.type === 'Local' || friends.some(f => f.id === u.id) ? (
                     <button className="btn btn-primary" style={{marginTop: '1rem', padding: '0.5rem 1rem', width: '100%'}} onClick={() => loadChat(u)}>
                       Talk Now
                     </button>
