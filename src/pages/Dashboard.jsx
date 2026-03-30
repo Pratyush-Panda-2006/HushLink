@@ -9,12 +9,26 @@ export default function Dashboard() {
   const [users, setUsers] = useState([]);
   const [requests, setRequests] = useState([]);
   const [friends, setFriends] = useState([]);
+  
   const [activeChat, setActiveChat] = useState(null);
+  const [hiddenChats, setHiddenChats] = useState([]);
+  const activeChatRef = useRef(null);
+
   const [messages, setMessages] = useState([]);
   const [messageInput, setMessageInput] = useState('');
-  const [isAnonymous, setIsAnonymous] = useState(false);
+  
   const [mobileView, setMobileView] = useState('sidebar'); // 'sidebar' or 'chat'
   const messagesEndRef = useRef(null);
+  
+  const [onlineUsers, setOnlineUsers] = useState([]);
+
+  useEffect(() => {
+    activeChatRef.current = activeChat;
+  }, [activeChat]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   useEffect(() => {
     const userStr = localStorage.getItem('user');
@@ -25,17 +39,75 @@ export default function Dashboard() {
     const user = JSON.parse(userStr);
     setCurrentUser(user);
 
+    const savedHidden = localStorage.getItem(`hiddenChats_${user.id}`);
+    if (savedHidden) {
+      setHiddenChats(JSON.parse(savedHidden));
+    }
+
     fetchUsers(user.id);
     fetchRequests(user.id);
     fetchFriends(user.id);
+
+    // Request desktop notifications if possible
+    if ("Notification" in window && Notification.permission !== "granted") {
+      Notification.requestPermission();
+    }
+
+    // Setup Supabase Realtime Presence Channel to track Live online users
+    const presenceChannel = supabase.channel('online-users', {
+      config: {
+        presence: { key: user.id },
+      },
+    });
+
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const newState = presenceChannel.presenceState();
+        setOnlineUsers(Object.keys(newState));
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await presenceChannel.track({ online_at: new Date().toISOString() });
+        }
+      });
 
     // Setup Supabase Realtime subscription for incoming messages
     const messageChannel = supabase
       .channel('public:Message')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'Message' }, (payload) => {
         const msg = payload.new;
+        
+        // If the message is related to us (sent or received)
         if (msg.receiverId === user.id || msg.senderId === user.id) {
-          setMessages((prev) => [...prev, msg]);
+          
+          // Only pop it onto the CURRENT screen if we are looking at the person who sent/received it
+          const currentVirtualChat = activeChatRef.current;
+          const isMatchedChat = currentVirtualChat && (msg.senderId === currentVirtualChat.id || msg.receiverId === currentVirtualChat.id);
+
+          if (isMatchedChat) {
+            setMessages((prev) => {
+              // Deduplicate: if the message ID already exists (from optimistic UI update), don't add it again!
+              if (prev.some(m => m.id === msg.id)) return prev;
+              return [...prev, msg];
+            });
+          } else if (msg.receiverId === user.id) {
+            // It's a new message for a DIFFERENT chat. Send Notification!
+            if ("Notification" in window && Notification.permission === "granted") {
+              new Notification(`New message!`, { body: msg.content });
+            }
+            
+            // Unhide chat if it was hidden
+            setHiddenChats(prev => {
+              if (prev.includes(msg.senderId)) {
+                const updated = prev.filter(id => id !== msg.senderId);
+                localStorage.setItem(`hiddenChats_${user.id}`, JSON.stringify(updated));
+                return updated;
+              }
+              return prev;
+            });
+
+            fetchFriends(user.id); // Refresh left sidebar just in case
+          }
         }
       })
       .subscribe();
@@ -52,12 +124,9 @@ export default function Dashboard() {
     return () => {
       supabase.removeChannel(messageChannel);
       supabase.removeChannel(requestChannel);
+      supabase.removeChannel(presenceChannel);
     };
   }, [navigate]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
 
   const fetchUsers = async (userId) => {
     const { data } = await supabase.from('User').select('*').neq('id', userId);
@@ -65,7 +134,6 @@ export default function Dashboard() {
   };
 
   const fetchRequests = async (userId) => {
-    // Note: Due to foreign constraints mapping, we manually join sender username
     const { data: reqs } = await supabase.from('ChatRequest').select('*').eq('receiverId', userId).eq('status', 'PENDING');
     if (reqs && reqs.length > 0) {
       const { data: allUsers } = await supabase.from('User').select('*');
@@ -80,7 +148,6 @@ export default function Dashboard() {
   };
 
   const fetchFriends = async (userId) => {
-    // Friends: people with ACCEPTED chat requests, OR people we've exchanged messages with
     const { data: reqs } = await supabase.from('ChatRequest').select('*').eq('status', 'ACCEPTED').or(`senderId.eq.${userId},receiverId.eq.${userId}`);
     const { data: msgs } = await supabase.from('Message').select('*').or(`senderId.eq.${userId},receiverId.eq.${userId}`);
     
@@ -97,10 +164,21 @@ export default function Dashboard() {
 
   const loadChat = async (friend) => {
     setActiveChat(friend);
-    setTab('chat');
+    // REMOVED 'setTab("chat")' HERE SO SIDEBAR LIST STAYS VISIBLE!
     setMobileView('chat');
     
-    // Fetch historical messages
+    // Unhide if it was hidden
+    setHiddenChats(prev => {
+      if (prev.includes(friend.id)) {
+         const newHidden = prev.filter(id => id !== friend.id);
+         if (currentUser?.id) {
+           localStorage.setItem(`hiddenChats_${currentUser.id}`, JSON.stringify(newHidden));
+         }
+         return newHidden;
+      }
+      return prev;
+    });
+    
     const { data } = await supabase
       .from('Message')
       .select('*')
@@ -116,7 +194,6 @@ export default function Dashboard() {
       alert('Request already sent!');
       return;
     }
-    
     await supabase.from('ChatRequest').insert([{ id: crypto.randomUUID(), senderId: currentUser.id, receiverId }]);
     alert('Request sent!');
   };
@@ -137,13 +214,36 @@ export default function Dashboard() {
       senderId: currentUser.id,
       receiverId: activeChat.id,
       content: messageInput,
-      isAnonymous
+      isAnonymous: false,
+      createdAt: new Date().toISOString() // add timestamp for optimistic UI
     };
     
-    // Optimistic UI update could go here, but since Realtime is fast we just insert
+    // We optimism to display right side fast while DB processes
+    setMessages((prev) => [...prev, newMessage]);
     await supabase.from('Message').insert([newMessage]);
     setMessageInput('');
   };
+
+  const removeChat = async (e, friendId) => {
+    e.stopPropagation();
+
+    // Hide the chat locally instead of deleting messages permanently
+    setHiddenChats(prev => {
+      if (prev.includes(friendId)) return prev;
+      const newHidden = [...prev, friendId];
+      if (currentUser?.id) {
+        localStorage.setItem(`hiddenChats_${currentUser.id}`, JSON.stringify(newHidden));
+      }
+      return newHidden;
+    });
+    
+    if (activeChat?.id === friendId) {
+      setActiveChat(null);
+      setMessages([]);
+      setMobileView('sidebar');
+    }
+  };
+
 
   if (!currentUser) return <div>Loading...</div>;
 
@@ -167,7 +267,10 @@ export default function Dashboard() {
               {users.map(u => (
                 <div key={u.id} className="card" style={{padding: '1rem', background: 'var(--color-dark-gray)', color: 'var(--color-white)', borderColor: 'var(--color-black)'}}>
                   <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                    <h3 style={{margin: 0}}>{u.username}</h3>
+                     <h3 style={{margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                       {u.username}
+                       {onlineUsers.includes(u.id) && <span style={{fontSize: '0.7rem', color: '#10b981', border: '1px solid #10b981', padding: '0.1rem 0.3rem', borderRadius: '4px'}}>🟢 Live</span>}
+                     </h3>
                     <span className="pill" style={{color: 'black', background: u.type === 'Local' ? 'var(--color-primary)' : 'var(--color-accent)'}}>{u.type}</span>
                   </div>
                   {u.type === 'Local' ? (
@@ -202,40 +305,59 @@ export default function Dashboard() {
         <div style={{ padding: '1rem', borderTop: '1px solid var(--color-dark-gray)', background: '#171e19' }}>
           <h3 style={{marginTop: 0, marginBottom: '0.5rem'}}>Active Chats</h3>
           <div style={{display: 'flex', flexDirection: 'column', gap: '0.5rem'}}>
-            {friends.map(f => (
-              <button 
+            {friends.filter(f => !hiddenChats.includes(f.id)).map(f => (
+              <div 
                 key={f.id} 
                 className="active-chat-btn"
-                style={{textAlign:'left', padding: '0.5rem', background: activeChat?.id === f.id ? 'var(--color-primary)' : 'transparent', color: activeChat?.id === f.id ? 'black' : 'white', borderRadius: '4px', border: activeChat?.id === f.id ? 'var(--border-thick)' : '1px solid transparent'}}
+                style={{display: 'flex', alignItems: 'center', padding: '0.5rem', background: activeChat?.id === f.id ? 'var(--color-primary)' : 'transparent', color: activeChat?.id === f.id ? 'black' : 'white', borderRadius: '4px', border: activeChat?.id === f.id ? 'var(--border-thick)' : '1px solid transparent', cursor: 'pointer'}}
                 onClick={() => loadChat(f)}
               >
-                {f.username}
-              </button>
+                <div style={{flex: 1}}>
+                  {onlineUsers.includes(f.id) && '🟢 '}
+                  {f.username}
+                </div>
+                <button 
+                  onClick={(e) => removeChat(e, f.id)} 
+                  style={{background: 'transparent', border: 'none', color: 'inherit', fontWeight: 'bold', fontSize: '1.2rem', cursor: 'pointer', padding: '0 0.5rem', opacity: 0.7}}
+                  title="Remove chat"
+                >
+                  &times;
+                </button>
+              </div>
             ))}
           </div>
         </div>
-
       </div>
 
       {/* Main Chat Area */}
       <div className={`dash-chat-col ${mobileView === 'chat' ? 'mobile-active' : 'mobile-hidden'}`}>
-        {tab === 'chat' && activeChat ? (
+        {activeChat ? (
           <>
             <div style={{ padding: '1.5rem', background: 'var(--color-white)', borderBottom: 'var(--border-thick)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <button className="mobile-only-btn btn btn-secondary" style={{padding: '0.4rem 0.8rem', borderRadius: '4px'}} onClick={() => { setMobileView('sidebar'); }}>
                 &larr; Back
               </button>
-              <h2 style={{ margin: 0 }}>Chat with {activeChat.username}</h2>
+              <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                 Chat with {activeChat.username}
+                 {onlineUsers.includes(activeChat.id) && <span style={{fontSize: '0.8rem', color: '#10b981', border: '1px solid #10b981', padding: '0.1rem 0.4rem', borderRadius: '4px'}}>Live</span>}
+              </h2>
             </div>
             
             <div style={{ flex: 1, overflowY: 'auto', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem', backgroundImage: 'radial-gradient(rgba(0,0,0,0.05) 2px, transparent 2px)', backgroundSize: '32px 32px' }}>
               {messages.map(m => {
                 const isMine = m.senderId === currentUser.id;
+                // Since anonymous mode is disabled, always resolve to real usernames.
                 const displayName = m.isAnonymous ? "Anonymous" : (isMine ? "You" : activeChat.username);
+                
+                // Format the timestamp beautifully
+                const timestamp = m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+                
                 return (
                   <div key={m.id} style={{ alignSelf: isMine ? 'flex-end' : 'flex-start', maxWidth: '60%' }}>
-                    <div style={{ fontSize: '0.8rem', opacity: 0.7, marginBottom: '0.2rem', textAlign: isMine ? 'right' : 'left' }}>
-                      {displayName}
+                    <div style={{ fontSize: '0.75rem', opacity: 0.7, marginBottom: '0.2rem', textAlign: isMine ? 'right' : 'left', display: 'flex', gap: '0.4rem', justifyContent: isMine ? 'flex-end' : 'flex-start' }}>
+                      <span>{displayName}</span>
+                      <span>•</span>
+                      <span>{timestamp}</span>
                     </div>
                     <div style={{ 
                       padding: '1rem', 
@@ -262,10 +384,6 @@ export default function Dashboard() {
                   value={messageInput}
                   onChange={e => setMessageInput(e.target.value)}
                 />
-                <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 700}}>
-                  <input type="checkbox" checked={isAnonymous} onChange={e => setIsAnonymous(e.target.checked)} />
-                  Anonymous
-                </label>
                 <button type="submit" className="btn btn-primary">Send</button>
               </form>
             </div>
@@ -295,7 +413,7 @@ export default function Dashboard() {
           flex: 1;
           display: flex;
           flex-direction: column;
-          background: #fffdf9; /* light warm background */
+          background: #fffdf9;
         }
         .mobile-only-btn {
           display: none;
