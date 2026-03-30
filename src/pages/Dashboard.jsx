@@ -88,7 +88,16 @@ export default function Dashboard() {
             setMessages((prev) => {
               // Deduplicate: if the message ID already exists (from optimistic UI update), don't add it again!
               if (prev.some(m => m.id === msg.id)) return prev;
-              return [...prev, msg];
+              const newList = [...prev, msg];
+              // Sort to guarantee correct chronological order
+              return newList.sort((a, b) => {
+                const getTime = (timestamp) => {
+                  if (!timestamp) return 0;
+                  const tStr = (!timestamp.endsWith('Z') && !timestamp.includes('+')) ? timestamp + 'Z' : timestamp;
+                  return new Date(tStr).getTime();
+                };
+                return getTime(a.createdAt) - getTime(b.createdAt);
+              });
             });
           } else if (msg.receiverId === user.id) {
             // It's a new message for a DIFFERENT chat. Send Notification!
@@ -185,7 +194,16 @@ export default function Dashboard() {
       .or(`and(senderId.eq.${currentUser.id},receiverId.eq.${friend.id}),and(senderId.eq.${friend.id},receiverId.eq.${currentUser.id})`)
       .order('createdAt', { ascending: true });
       
-    setMessages(data || []);
+    const sortedData = (data || []).sort((a, b) => {
+      const getTime = (timestamp) => {
+        if (!timestamp) return 0;
+        const tStr = (!timestamp.endsWith('Z') && !timestamp.includes('+')) ? timestamp + 'Z' : timestamp;
+        return new Date(tStr).getTime();
+      };
+      return getTime(a.createdAt) - getTime(b.createdAt);
+    });
+      
+    setMessages(sortedData);
   };
 
   const sendRequest = async (receiverId) => {
@@ -219,7 +237,18 @@ export default function Dashboard() {
     };
     
     // We optimism to display right side fast while DB processes
-    setMessages((prev) => [...prev, newMessage]);
+    setMessages((prev) => {
+      const newList = [...prev, newMessage];
+      return newList.sort((a, b) => {
+        const getTime = (timestamp) => {
+          if (!timestamp) return 0;
+          const tStr = (!timestamp.endsWith('Z') && !timestamp.includes('+')) ? timestamp + 'Z' : timestamp;
+          return new Date(tStr).getTime();
+        };
+        return getTime(a.createdAt) - getTime(b.createdAt);
+      });
+    });
+    
     await supabase.from('Message').insert([newMessage]);
     setMessageInput('');
   };
@@ -349,8 +378,18 @@ export default function Dashboard() {
                 // Since anonymous mode is disabled, always resolve to real usernames.
                 const displayName = m.isAnonymous ? "Anonymous" : (isMine ? "You" : activeChat.username);
                 
-                // Format the timestamp beautifully
-                const timestamp = m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+                // Format the timestamp beautifully with actual date and correct local time parsing
+                let timestamp = '';
+                if (m.createdAt) {
+                  let timeStr = m.createdAt;
+                  if (!timeStr.endsWith('Z') && !timeStr.includes('+')) {
+                    timeStr += 'Z'; // Enforce UTC if timezone is missing
+                  }
+                  const d = new Date(timeStr);
+                  if (!isNaN(d.getTime())) {
+                    timestamp = d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) + ' • ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  }
+                }
                 
                 return (
                   <div key={m.id} style={{ alignSelf: isMine ? 'flex-end' : 'flex-start', maxWidth: '60%' }}>
