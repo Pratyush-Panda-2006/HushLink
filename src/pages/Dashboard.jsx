@@ -21,6 +21,7 @@ export default function Dashboard() {
   const messagesEndRef = useRef(null);
   
   const [onlineUsers, setOnlineUsers] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     activeChatRef.current = activeChat;
@@ -86,11 +87,15 @@ export default function Dashboard() {
 
           if (isMatchedChat) {
             setMessages((prev) => {
-              // Deduplicate: if the message ID already exists (from optimistic UI update), don't add it again!
-              if (prev.some(m => m.id === msg.id)) return prev;
-              const newList = [...prev, msg];
+              // Deduplicate and update with real server data
+              let updatedList;
+              if (prev.some(m => m.id === msg.id)) {
+                updatedList = prev.map(m => m.id === msg.id ? msg : m);
+              } else {
+                updatedList = [...prev, msg];
+              }
               // Sort to guarantee correct chronological order
-              return newList.sort((a, b) => {
+              return updatedList.sort((a, b) => {
                 const getTime = (timestamp) => {
                   if (!timestamp) return 0;
                   const tStr = (!timestamp.endsWith('Z') && !timestamp.includes('+')) ? timestamp + 'Z' : timestamp;
@@ -99,6 +104,13 @@ export default function Dashboard() {
                 return getTime(a.createdAt) - getTime(b.createdAt);
               });
             });
+            
+            // Send notification if someone texts you even in matching chat if the tab is hidden
+            if (msg.receiverId === user.id && document.hidden) {
+              if ("Notification" in window && Notification.permission === "granted") {
+                new Notification(`New message!`, { body: msg.content });
+              }
+            }
           } else if (msg.receiverId === user.id) {
             // It's a new message for a DIFFERENT chat. Send Notification!
             if ("Notification" in window && Notification.permission === "granted") {
@@ -227,13 +239,33 @@ export default function Dashboard() {
     e.preventDefault();
     if (!messageInput.trim() || !activeChat) return;
 
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+
+    let safeCreatedAt = new Date().toISOString();
+    
+    // Prevent clock skew logic: if the other person's clock is faster, our replies would 'go up'.
+    // Fix: Ensure our reply is stamped mathematically after the last message.
+    if (messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg.createdAt) {
+        const tStr = (!lastMsg.createdAt.endsWith('Z') && !lastMsg.createdAt.includes('+')) ? lastMsg.createdAt + 'Z' : lastMsg.createdAt;
+        const lastMsgTime = new Date(tStr).getTime();
+        const nowTime = new Date().getTime();
+        if (lastMsgTime >= nowTime) {
+           safeCreatedAt = new Date(lastMsgTime + 10).toISOString();
+        }
+      }
+    }
+
     const newMessage = {
       id: crypto.randomUUID(),
       senderId: currentUser.id,
       receiverId: activeChat.id,
       content: messageInput,
       isAnonymous: false,
-      createdAt: new Date().toISOString() // add timestamp for optimistic UI
+      createdAt: safeCreatedAt // precise skew-free timestamp
     };
     
     // We optimism to display right side fast while DB processes
@@ -293,7 +325,15 @@ export default function Dashboard() {
         <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
           {tab === 'discover' && (
             <div style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
-              {users.map(u => (
+              <input 
+                type="text" 
+                className="input-field" 
+                placeholder="Search users..." 
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{ width: '100%', marginBottom: '0.5rem' }}
+              />
+              {users.filter(u => u.username.toLowerCase().includes(searchQuery.toLowerCase())).map(u => (
                 <div key={u.id} className="card" style={{padding: '1rem', background: 'var(--color-dark-gray)', color: 'var(--color-white)', borderColor: 'var(--color-black)'}}>
                   <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                      <h3 style={{margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
