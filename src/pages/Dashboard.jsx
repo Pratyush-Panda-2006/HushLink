@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { RevealText } from '../components/ui/RevealText';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -335,12 +336,38 @@ export default function Dashboard() {
               />
               {users.filter(u => u.username.toLowerCase().includes(searchQuery.toLowerCase())).map(u => (
                 <div key={u.id} className="card" style={{padding: '1rem', background: 'var(--color-dark-gray)', color: 'var(--color-white)', borderColor: 'var(--color-black)'}}>
-                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                     <h3 style={{margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                       {u.username}
-                       {onlineUsers.includes(u.id) && <span style={{fontSize: '0.7rem', color: '#10b981', border: '1px solid #10b981', padding: '0.1rem 0.3rem', borderRadius: '4px'}}>🟢 Live</span>}
-                     </h3>
-                    <span className="pill" style={{color: 'black', background: u.type === 'Local' ? 'var(--color-primary)' : 'var(--color-accent)'}}>{u.type}</span>
+                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem'}}>
+                     <div style={{flex: 1, overflow: 'hidden'}}>
+                       <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                         {['smruti', 'rupesh indua', 'a', 'huzzlink', 'sourabh ranjan mirdha', 'baibhavvvvvvv', 'nirakarpatel_07'].includes(u.username.toLowerCase()) ? (
+                           <RevealText
+                             text={u.username}
+                             textColor="text-white"
+                             overlayColor="text-yellow-300"
+                             fontSize="text-[1.1rem]"
+                             letterDelay={0.03}
+                             overlayDelay={0.02}
+                             overlayDuration={0.3}
+                             springDuration={400}
+                             autoCycle={true}
+                             autoCycleSpeed={150}
+                           />
+                         ) : (
+                           <h3 style={{margin: 0, fontWeight: 800, fontSize: '1.1rem'}}>{u.username}</h3>
+                         )}
+                       </div>
+                       {onlineUsers.includes(u.id) && (
+                         <div style={{display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.3rem'}}>
+                           <span style={{
+                             width: '8px', height: '8px', borderRadius: '50%', background: '#10b981',
+                             display: 'inline-block', boxShadow: '0 0 6px #10b981',
+                             animation: 'pulse-green 1.5s ease-in-out infinite',
+                           }} />
+                           <span style={{fontSize: '0.7rem', color: '#10b981', fontWeight: 600, letterSpacing: '0.05em'}}>Live Now</span>
+                         </div>
+                       )}
+                     </div>
+                    <span className="pill" style={{color: 'black', background: u.type === 'Local' ? 'var(--color-primary)' : 'var(--color-accent)', flexShrink: 0}}>{u.type}</span>
                   </div>
                   {u.type === 'Local' || friends.some(f => f.id === u.id) ? (
                     <button className="btn btn-primary" style={{marginTop: '1rem', padding: '0.5rem 1rem', width: '100%'}} onClick={() => loadChat(u)}>
