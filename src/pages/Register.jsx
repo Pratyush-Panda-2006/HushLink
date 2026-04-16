@@ -11,32 +11,38 @@ export default function Register() {
   const handleRegister = async (e) => {
     e.preventDefault();
     try {
-      const { data: existing } = await supabase
-        .from('User')
-        .select('id')
-        .eq('username', formData.username)
-        .single();
+      const email = `${formData.username.toLowerCase()}@hushlink.app`;
       
-      if (existing) {
-        setError('Username taken');
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password: formData.password,
+      });
+
+      if (authError) {
+        if (authError.message.includes('User already registered')) {
+            setError('Username taken');
+        } else {
+            setError(authError.message);
+        }
         return;
       }
 
-      const { data, error: insertError } = await supabase
+      const userId = authData.user.id;
+
+      const profileData = { 
+        id: userId,
+        username: formData.username, 
+        type: formData.type || 'Local' 
+      };
+
+      const { error: insertError } = await supabase
         .from('User')
-        .insert([{ 
-          id: crypto.randomUUID(),
-          username: formData.username, 
-          password: formData.password, 
-          type: formData.type || 'Local' 
-        }])
-        .select()
-        .single();
+        .insert([profileData]);
 
       if (insertError) {
         setError(insertError.message);
       } else {
-        localStorage.setItem('user', JSON.stringify(data));
+        localStorage.setItem('user', JSON.stringify(profileData));
         navigate('/dashboard');
       }
     } catch(err) {

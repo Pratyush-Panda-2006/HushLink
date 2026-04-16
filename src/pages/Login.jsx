@@ -11,23 +11,30 @@ export default function Login() {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const { data, error } = await supabase
-        .from('User')
-        .select('*')
-        .eq('username', formData.username)
-        .single();
+      const email = `${formData.username.toLowerCase()}@hushlink.app`;
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password: formData.password
+      });
 
-      if (error || !data) {
-        setError('Invalid credentials');
+      if (authError || !authData.user) {
+        setError(authError ? authError.message : 'Invalid credentials');
         return;
       }
 
-      if (data.password === formData.password) {
-        localStorage.setItem('user', JSON.stringify(data));
-        navigate('/dashboard');
-      } else {
-        setError('Invalid credentials');
+      const { data: profile, error: profileError } = await supabase
+        .from('User')
+        .select('*')
+        .eq('id', authData.user.id)
+        .single();
+
+      if (profileError || !profile) {
+        setError('User profile not found. Please register.');
+        return;
       }
+
+      localStorage.setItem('user', JSON.stringify(profile));
+      navigate('/dashboard');
     } catch(err) {
       setError('Login failed');
     }
